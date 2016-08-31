@@ -1,0 +1,6 @@
+1. The address of function _main and recur and the static data is defined in the executable. They are defined in Symbol table. 
+
+3. Growing in from big to small.
+4. 3*16 = 48
+5. The heap is in 0xc10010, growing from small to big.
+6. No, they are not contiguous. Since 0xc10080 - 0xc10010 = 0x70 = 102  =  100 + 2, there is a gap.
