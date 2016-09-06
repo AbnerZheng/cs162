@@ -1,0 +1,128 @@
+\documentclass[utf-8]{ctexart}
+\usepackage{minted}
+
+\begin{document}
+\author{AbnerZheng}
+\title{Answers for section2:Processes}
+\date{2016/09/04}
+\maketitle{}
+\section{Warmup}
+\label{sec:warmup}
+
+\subsection{Hello World}
+\label{sec:1.1}
+It will print:
+
+Hello World: 90210
+Hello World: 0
+
+or:
+
+Hello World: 0
+Hello World: 90210
+
+\section{Problems}
+\label{sec:3}
+
+\subsection{Forks}
+\label{sec:3.1}
+
+1) It will create 8 processes.
+
+2) It will crash the system.
+
+\subsection{Stack Allocation}
+\label{sec:3.2}
+
+Stuff is 7
+
+Stuff is 7
+
+\subsection{Heap Allocation}
+\label{sec:3.3}
+Stuff is 7
+
+Stuff is 7
+
+\subsection{Slightly More Complex Heap Allocation}
+\label{sec:3.4}
+
+0123456789
+
+0123456700
+
+\subsection{Simple Wait}
+\label{sec:3.5}
+
+1)
+
+It will print:
+
+Hello World
+
+:  0
+
+Hello World
+
+:  90210
+
+2)
+
+\begin{minted}{c}
+#include "stdio.h"
+#include "unistd.h"
+#include "stdlib.h"
+#include "sys/wait.h"
+#include "sys/types.h"
+int main(void) {
+  pid_t pid = fork();
+  pid_t pr;
+  int status;
+  if (pid != 0) { // excute by parent process
+    do{
+      pr = waitpid(pid, &status,WNOHANG);
+    }while(pr==0);
+  }
+  printf("Hello World\n: %d\n", pid);
+  return 0;
+}
+\end{minted}
+
+\subsection{Fork and File Descriptors}
+\label{sec:3.6}
+
+it will print:
+
+Hello World
+
+\subsection{Exec+Fork}
+\label{sec:3.8}
+
+\begin{minted}{c}
+
+#include "stdio.h"
+#include "unistd.h"
+#include "stdlib.h"
+#include "sys/types.h"
+
+int main(void){
+    char** argv = (char**) malloc(3*sizeof(char*)
+);
+    argv[0] = "/bin/ls";
+    argv[1] = ".";
+    argv[2] = NULL;
+    for(int i = 0; i< 10; i++){
+        printf("%d\n", i);
+        if(i == 3){
+            pid_t pi = fork();
+            if(pi == 0){
+                execv("/bin/ls", argv);
+            }
+        }
+    }
+    return 0;
+}
+
+\end{minted}
+
+\end{document}
