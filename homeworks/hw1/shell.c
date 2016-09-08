@@ -9,6 +9,8 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
+#include <linux/limits.h>
+
 
 #include "tokenizer.h"
 
@@ -87,6 +89,53 @@ int lookup(char cmd[]) {
       return i;
   return -1;
 }
+/* find cmd in path */
+char* find_in_path(char* path, char* cmd){
+    size_t path_len = strlen(path);
+    if(path_len == 0){
+        return NULL;
+    }
+    int length=0;
+    while(length<path_len){
+        if(path[length] == ':'){
+            //find the cmd in the path
+            break;
+        }
+        length++;
+    }
+    char* path_S = malloc(sizeof(char) *(length + strlen(cmd) + 2));
+    strncpy(path_S, path, length);
+    const char* d = "/";
+    strcat(path_S, d);
+    strcat(path_S, cmd);
+    if( access( path_S, F_OK ) != -1 ) {
+        return path_S;
+    }
+    path = path + length+1;
+    return find_in_path(path, cmd);
+}
+
+
+
+/* Resolve path */
+char *resolve(char* cmd){
+    char* path = getenv("PATH");
+    char* command = malloc(PATH_MAX);
+    switch(cmd[0]){
+        case '/':
+        case '.':
+            command = realpath(cmd, command);
+            if(access(command,F_OK)!=-1)
+                return command;
+            else
+                return NULL;
+            break;
+        default:
+            break;
+    }
+
+    return find_in_path(path, cmd);
+}
 
 /* Intialization procedures for this shell */
 void init_shell() {
@@ -127,7 +176,6 @@ int main(unused int argc, unused char *argv[]) {
   while (fgets(line, 4096, stdin)) {
     /* Split our line into words. */
     struct tokens *tokens = tokenize(line);
-
     /* Find which built-in function to run. */
     int fundex = lookup(tokens_get_token(tokens, 0));
 
@@ -137,21 +185,25 @@ int main(unused int argc, unused char *argv[]) {
       /* REPLACE this to run commands as programs. */
       //fprintf(stdout, "This shell doesn't know how to run programs.\n");
       size_t tokens_len = tokens_get_length(tokens);
-      char * cmd_o = tokens_get_token(tokens, 0);
-      pid_t pd = fork();
-      int status;
-      if(!pd){ // child process
-          char *params[tokens_len+1];
-          int i;
-          for(i = 0; i<tokens_len; i++){
-            params[i] = tokens_get_token(tokens, i);
-            printf("%s",params[i]);
-          }
-          params[i] = NULL;
-          execv(cmd_o, params);
-          exit(0);
+      char * cmd = tokens_get_token(tokens, 0);
+      char * cmd_path =resolve(cmd);
+      if(!cmd_path){
+        fprintf(stdout, "There is no command named: %s\n", cmd);
       }else{
-          wait(&status);
+        pid_t pd = fork();
+        int status;
+        if(!pd){ // child process
+            char *params[tokens_len+1];
+            int i;
+            for(i = 0; i<tokens_len; i++){
+                params[i] = tokens_get_token(tokens, i);
+            }
+            params[i] = NULL;
+            execv(cmd_path, params);
+            exit(0);
+        }else{
+            wait(&status);
+        }
       }
     }
 
@@ -165,3 +217,4 @@ int main(unused int argc, unused char *argv[]) {
 
   return 0;
 }
+
