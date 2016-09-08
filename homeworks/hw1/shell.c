@@ -23,6 +23,11 @@ bool shell_is_interactive;
 /* File descriptor for the shell input */
 int shell_terminal;
 
+FILE* in;
+FILE* out;
+
+
+
 /* Terminal mode settings for the shell */
 struct termios shell_tmodes;
 
@@ -39,55 +44,51 @@ typedef int cmd_fun_t(struct tokens *tokens);
 
 /* Built-in command struct and lookup table */
 typedef struct fun_desc {
-  cmd_fun_t *fun;
-  char *cmd;
-  char *doc;
+    cmd_fun_t *fun;
+    char *cmd;
+    char *doc;
 } fun_desc_t;
 
 fun_desc_t cmd_table[] = {
-  {cmd_help, "?", "show this help menu"},
-  {cmd_exit, "exit", "exit the command shell"},
-  {cmd_pwd, "pwd", "print current working directory"},
-  {cmd_cd, "cd", "change directory"}
+    {cmd_help, "?", "show this help menu"},
+    {cmd_exit, "exit", "exit the command shell"},
+    {cmd_pwd, "pwd", "print current working directory"},
+    {cmd_cd, "cd", "change directory"}
 };
 
 int cmd_cd(struct tokens *tks){
     size_t tokens_len = tokens_get_length(tks);
 
-    if(tokens_len == 2){
-        const char *path = tokens_get_token(tks, tokens_len-1);
-        printf("%s", path);
-        printf("%d",chdir(path));
-        return 1;
-    }
-    return 0;
+    const char *path = tokens_get_token(tks, tokens_len-1);
+    chdir(path);
+    return 1;
 }
 
 int cmd_pwd(unused struct tokens *tokens){
     char pwd[80];
     getcwd(pwd, sizeof(pwd));
-    printf("%s\n", pwd);
+    fprintf(out,"%s\n", pwd);
     return 1;
 }
 
 /* Prints a helpful description for the given command */
 int cmd_help(unused struct tokens *tokens) {
-  for (unsigned int i = 0; i < sizeof(cmd_table) / sizeof(fun_desc_t); i++)
-    printf("%s - %s\n", cmd_table[i].cmd, cmd_table[i].doc);
-  return 1;
+    for (unsigned int i = 0; i < sizeof(cmd_table) / sizeof(fun_desc_t); i++)
+        printf("%s - %s\n", cmd_table[i].cmd, cmd_table[i].doc);
+    return 1;
 }
 
 /* Exits this shell */
 int cmd_exit(unused struct tokens *tokens) {
-  exit(0);
+    exit(0);
 }
 
 /* Looks up the built-in command, if it exists. */
 int lookup(char cmd[]) {
-  for (unsigned int i = 0; i < sizeof(cmd_table) / sizeof(fun_desc_t); i++)
-    if (cmd && (strcmp(cmd_table[i].cmd, cmd) == 0))
-      return i;
-  return -1;
+    for (unsigned int i = 0; i < sizeof(cmd_table) / sizeof(fun_desc_t); i++)
+        if (cmd && (strcmp(cmd_table[i].cmd, cmd) == 0))
+            return i;
+    return -1;
 }
 /* find cmd in path */
 char* find_in_path(char* path, char* cmd){
@@ -139,82 +140,131 @@ char *resolve(char* cmd){
 
 /* Intialization procedures for this shell */
 void init_shell() {
-  /* Our shell is connected to standard input. */
-  shell_terminal = STDIN_FILENO;
+    /* Our shell is connected to standard input. */
+    shell_terminal = STDIN_FILENO;
 
-  /* Check if we are running interactively */
-  shell_is_interactive = isatty(shell_terminal);
+    /* Check if we are running interactively */
+    shell_is_interactive = isatty(shell_terminal);
 
-  if (shell_is_interactive) {
-    /* If the shell is not currently in the foreground, we must pause the shell until it becomes a
-     * foreground process. We use SIGTTIN to pause the shell. When the shell gets moved to the
-     * foreground, we'll receive a SIGCONT. */
-    while (tcgetpgrp(shell_terminal) != (shell_pgid = getpgrp()))
-      kill(-shell_pgid, SIGTTIN);
+    if (shell_is_interactive) {
+        /* If the shell is not currently in the foreground, we must pause the shell until it becomes a
+         * foreground process. We use SIGTTIN to pause the shell. When the shell gets moved to the
+         * foreground, we'll receive a SIGCONT. */
+        while (tcgetpgrp(shell_terminal) != (shell_pgid = getpgrp()))
+            kill(-shell_pgid, SIGTTIN);
 
-    /* Saves the shell's process id */
-    shell_pgid = getpid();
+        /* Saves the shell's process id */
+        shell_pgid = getpid();
 
-    /* Take control of the terminal */
-    tcsetpgrp(shell_terminal, shell_pgid);
+        /* Take control of the terminal */
+        tcsetpgrp(shell_terminal, shell_pgid);
 
-    /* Save the current termios to a variable, so it can be restored later. */
-    tcgetattr(shell_terminal, &shell_tmodes);
-  }
+        /* Save the current termios to a variable, so it can be restored later. */
+        tcgetattr(shell_terminal, &shell_tmodes);
+    }
 }
-
 int main(unused int argc, unused char *argv[]) {
-  init_shell();
+    init_shell();
+    in = stdin;
+    out = stdout;
 
-  static char line[4096];
-  int line_num = 0;
+    static char line[4096];
+    int line_num = 0;
 
-  /* Please only print shell prompts when standard input is not a tty */
-  if (shell_is_interactive)
-    fprintf(stdout, "%d: ", line_num);
+    /* Please only print shell prompts when standard input is not a tty */
+    if (shell_is_interactive)
+        fprintf(stdout, "%d: ", line_num);
 
-  while (fgets(line, 4096, stdin)) {
-    /* Split our line into words. */
-    struct tokens *tokens = tokenize(line);
-    /* Find which built-in function to run. */
-    int fundex = lookup(tokens_get_token(tokens, 0));
+    while (fgets(line, 4096, stdin)) {
+        /* Split our line into words. */
+        struct tokens *tokens = tokenize(line);
+        /* Find which built-in function to run. */
+        int fundex = lookup(tokens_get_token(tokens, 0));
 
-    if (fundex >= 0) {
-      cmd_table[fundex].fun(tokens);
-    } else {
-      /* REPLACE this to run commands as programs. */
-      //fprintf(stdout, "This shell doesn't know how to run programs.\n");
-      size_t tokens_len = tokens_get_length(tokens);
-      char * cmd = tokens_get_token(tokens, 0);
-      char * cmd_path =resolve(cmd);
-      if(!cmd_path){
-        fprintf(stdout, "There is no command named: %s\n", cmd);
-      }else{
-        pid_t pd = fork();
-        int status;
-        if(!pd){ // child process
-            char *params[tokens_len+1];
-            int i;
-            for(i = 0; i<tokens_len; i++){
-                params[i] = tokens_get_token(tokens, i);
+        if (fundex >= 0) {
+            size_t tokens_len = tokens_get_length(tokens);
+            int wr=0;
+            for(int i = 0; i<tokens_len; i++){
+                char* token = tokens_get_token(tokens, i);
+                char* file;
+                switch(token[0]){
+                    case '<':
+                        file = tokens_get_token(tokens, ++i);
+                        //dup_stdin =  dup(fileno(stdin));
+                        in = fopen(file, "r");
+                        fgets(line, 4096, in);
+                        tokens = tokenize(line);
+                        wr+=1;
+                        break;
+                    case '>':
+                        file = tokens_get_token(tokens, ++i);
+                        //dup_stdout = dup(fileno(stdout));
+                        out = fopen(file, "w");
+                        wr+=2;
+                        break;
+                    default:
+                        break;
+                }
             }
-            params[i] = NULL;
-            execv(cmd_path, params);
-            exit(0);
-        }else{
-            wait(&status);
+            cmd_table[fundex].fun(tokens);
+            if(wr & 1){
+                fclose(in);
+                in = stdin;
+            }
+            if(wr & 2){
+                fclose(out);
+                out = stdout;
+            }
+        } else {
+            /* REPLACE this to run commands as programs. */
+            //fprintf(stdout, "This shell doesn't know how to run programs.\n");
+            size_t tokens_len = tokens_get_length(tokens);
+            char * cmd = tokens_get_token(tokens, 0);
+            char * cmd_path =resolve(cmd);
+            if(!cmd_path){
+                fprintf(stdout, "There is no command named: %s\n", cmd);
+            }else{
+                pid_t pd = fork();
+                int status;
+                if(!pd){ // child process
+                    char *params[tokens_len+1];
+                    int j=0;
+                    for(int i = 0; i<tokens_len; i++){
+                        char* token = tokens_get_token(tokens, i);
+                        char* file;
+                        switch(token[0]){
+                            case '<':
+                                file = tokens_get_token(tokens, ++i);
+                                freopen(file, "r",stdin);
+                                break;
+                            case '>':
+                                file = tokens_get_token(tokens, ++i);
+                                freopen(file, "w", stdout);
+                                break;
+                            default:
+                                params[j++] = tokens_get_token(tokens, i);
+                                break;
+                        }
+                    }
+                    params[j] = NULL;
+                    execv(cmd_path, params);
+                    fclose(stdin);
+                    fclose(stdout);
+                    exit(0);
+                }else{
+                    wait(&status);
+                }
+            }
         }
-      }
+
+        if (shell_is_interactive)
+            /* Please only print shell prompts when standard input is not a tty */
+            fprintf(stdout, "%d: ", ++line_num);
+
+        /* Clean up memory */
+        tokens_destroy(tokens);
     }
 
-    if (shell_is_interactive)
-      /* Please only print shell prompts when standard input is not a tty */
-      fprintf(stdout, "%d: ", ++line_num);
-
-    /* Clean up memory */
-    tokens_destroy(tokens);
-  }
-
-  return 0;
+    return 0;
 }
 

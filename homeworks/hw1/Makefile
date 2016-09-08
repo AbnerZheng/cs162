@@ -17,3 +17,4 @@ $(EXECUTABLES): $(OBJS)
 
 clean:
 	rm -rf $(EXECUTABLES) $(OBJS)
+	rm ctags
