@@ -83,6 +83,7 @@ int cmd_exit(unused struct tokens *tokens) {
     exit(0);
 }
 
+
 /* Looks up the built-in command, if it exists. */
 int lookup(char cmd[]) {
     for (unsigned int i = 0; i < sizeof(cmd_table) / sizeof(fun_desc_t); i++)
@@ -168,8 +169,13 @@ int main(unused int argc, unused char *argv[]) {
     in = stdin;
     out = stdout;
 
+    printf("current terminal controll pgid: %d\n", tcgetpgrp(0));
+    printf("main process's pgid: %d,pid: %d\n", getpgid(getpid()), getpid());
+
     static char line[4096];
     int line_num = 0;
+
+    signal(SIGTTOU,SIG_IGN);
 
     /* Please only print shell prompts when standard input is not a tty */
     if (shell_is_interactive)
@@ -227,6 +233,8 @@ int main(unused int argc, unused char *argv[]) {
                 pid_t pd = fork();
                 int status;
                 if(!pd){ // child process
+                    int w_r =0;
+                    setpgid(getpid(),getpid());
                     char *params[tokens_len+1];
                     int j=0;
                     for(int i = 0; i<tokens_len; i++){
@@ -234,10 +242,12 @@ int main(unused int argc, unused char *argv[]) {
                         char* file;
                         switch(token[0]){
                             case '<':
+                                w_r += 1;
                                 file = tokens_get_token(tokens, ++i);
                                 freopen(file, "r",stdin);
                                 break;
                             case '>':
+                                w_r += 2;
                                 file = tokens_get_token(tokens, ++i);
                                 freopen(file, "w", stdout);
                                 break;
@@ -248,11 +258,17 @@ int main(unused int argc, unused char *argv[]) {
                     }
                     params[j] = NULL;
                     execv(cmd_path, params);
-                    fclose(stdin);
-                    fclose(stdout);
+                    if(w_r & 1){
+                        fclose(stdin);
+                    }
+                    if(w_r & 2){
+                        fclose(stdout);
+                    }
                     exit(0);
                 }else{
+                    tcsetpgrp(STDIN_FILENO, pd);
                     wait(&status);
+                    tcsetpgrp(STDIN_FILENO, getpid());
                 }
             }
         }
